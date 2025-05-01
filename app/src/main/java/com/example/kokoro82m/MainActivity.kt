@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.kokoro82m.screens.Acknowledgements
+import com.example.kokoro82m.utils.DotMatrixAnimation
 import com.example.kokoro82m.utils.MainViewModel
 import com.example.kokoro82m.utils.PhonemeConverter
 import com.example.kokoro82m.utils.StyleLoader
@@ -76,6 +77,7 @@ class MyApplication : Application() {
 class MainActivity : ComponentActivity() {
     private lateinit var phonemeConverter: PhonemeConverter
     private val scope = MainScope()
+    private lateinit var session: OrtSession
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -88,12 +90,12 @@ class MainActivity : ComponentActivity() {
                 }
 
                 val viewModel: MainViewModel = viewModel { MainViewModel(this@MainActivity) }
-                val session = remember { viewModel.getSession() }
+                session = remember { viewModel.getSession() }
 
                 MainScreen(
                     session = session,
                     phonemeConverter = phonemeConverter,
-                    onGenerateAudio = { text, style, speed, shouldSave, onComplete ->
+                    onGenerateAudio = { text, style, speed, shouldSave, onComplete, onStart ->
                         generateAudio(
                             session,
                             phonemeConverter,
@@ -103,7 +105,8 @@ class MainActivity : ComponentActivity() {
                             this@MainActivity,
                             scope,
                             shouldSave,
-                            onComplete
+                            onComplete,
+                            onStart
                         )
                     }
                 )
@@ -116,6 +119,7 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         scope.cancel()
+        session.close()
     }
 }
 
@@ -128,6 +132,7 @@ private fun generateAudio(
     context: Context,
     scope: CoroutineScope,
     shouldSave: Boolean,
+    onStart: () -> Unit,
     onComplete: () -> Unit
 ) {
     scope.launch(Dispatchers.IO) {
@@ -146,14 +151,15 @@ private fun generateAudio(
 
             playAudio(
                 audioData, scope,
-                onComplete = onComplete
+                onComplete = onComplete,
+                onStart = onStart
             )
 
             if (shouldSave) {
                 saveAudio(audioData, context)
             }
 
-            session.close()
+//            session.close()
         } catch (e: Exception) {
             Log.e("Kokoro", "Error: ${e.message}")
             withContext(Dispatchers.Main) {
@@ -178,7 +184,7 @@ sealed class Screen(val title: String) {
 fun MainScreen(
     session: OrtSession,
     phonemeConverter: PhonemeConverter,
-    onGenerateAudio: (String, String, Float, Boolean, () -> Unit) -> Unit
+    onGenerateAudio: (String, String, Float, Boolean, () -> Unit, () -> Unit) -> Unit
 ) {
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Basic) }
 
@@ -190,6 +196,7 @@ fun MainScreen(
             )
         },
         bottomBar = {
+
             NavigationBar {
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.Home, contentDescription = "Basic") },
@@ -232,12 +239,13 @@ fun MainScreen(
 @Composable
 fun BasicScreen(
     session: OrtSession,
-    onGenerateAudio: (String, String, Float, Boolean, () -> Unit) -> Unit
+    onGenerateAudio: (String, String, Float, Boolean, () -> Unit, () -> Unit) -> Unit
 ) {
     var text by remember { mutableStateOf("This is her warm heart, her warmest kokoro, unwavering love and comfort.") }
-    var style by remember { mutableStateOf("af_sarah") }
+    var style by remember { mutableStateOf("af_sky") }
     var speed by remember { mutableFloatStateOf(1.0f) }
     var isProcessing by remember { mutableStateOf(false) }
+    var isPlaying by remember { mutableStateOf(false) }
     var shouldSaveFile by remember { mutableStateOf(false) }
 
     val names = listOf(
@@ -272,7 +280,14 @@ fun BasicScreen(
                 keyboardType = KeyboardType.Text
             )
         )
-
+        if (isProcessing) {
+            DotMatrixAnimation(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                animationDuration = 500
+            )
+        }
         ExposedDropdownMenuBox(
             expanded = expanded,
             onExpandedChange = { expanded = !expanded },
@@ -325,7 +340,10 @@ fun BasicScreen(
                 onClick = {
                     shouldSaveFile = false
                     isProcessing = true
-                    onGenerateAudio(text, style, speed, shouldSaveFile) {
+                    onGenerateAudio(text, style, speed, shouldSaveFile, {
+                        isProcessing = false
+                    }) {
+                        isPlaying = true
                         isProcessing = false
                     }
                 },
@@ -343,7 +361,10 @@ fun BasicScreen(
                 onClick = {
                     shouldSaveFile = true
                     isProcessing = true
-                    onGenerateAudio(text, style, speed, shouldSaveFile) {
+                    onGenerateAudio(text, style, speed, shouldSaveFile, {
+                        isProcessing = false
+                    }) {
+                        isPlaying = true
                         isProcessing = false
                     }
                 },

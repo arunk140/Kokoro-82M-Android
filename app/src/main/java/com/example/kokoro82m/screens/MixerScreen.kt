@@ -202,7 +202,7 @@ fun generateAudio(
                 speed = speed,
                 session = session
             )
-            playAudio(audio, scope) {}
+            playAudio(audio, scope, {}) {}
         } catch (e: Exception) {
             Log.e("Kokoro", "Error: ${e.message}")
         } finally {
